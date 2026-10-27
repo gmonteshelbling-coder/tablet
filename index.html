@@ -1,0 +1,581 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>Ruleta PDV</title>
+<style>
+:root{--c1:#3B1560;--c2:#F2B705;--fg:#fff;--mut:#bdb3cc;--card:#241236;--err:#ff7a7a;--ok:#8be28b}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;height:100%;background:#0d0218;color:var(--fg);font-family:system-ui,-apple-system,"Segoe UI",sans-serif;overflow:hidden;user-select:none}
+input{user-select:text}
+[hidden]{display:none!important}
+.vista{position:fixed;inset:0;display:none}
+.vista.on{display:flex}
+#vLogin{flex-direction:column;align-items:center;justify-content:center;background:radial-gradient(circle at 50% 30%,var(--c1),#0d0218 80%)}
+#vVideo{background:#000}
+#vJuego{flex-direction:column;align-items:center;justify-content:center;background:radial-gradient(circle at 50% 35%,var(--c1),#0d0218 85%)}
+#vDueno{overflow:auto;padding:20px 16px;background:#140821}
+#vDueno.on{display:block}
+.wrap{width:min(380px,90vw)}
+.btn{padding:14px 22px;border-radius:12px;border:0;background:var(--c2);color:#000;font:inherit;font-weight:700;font-size:17px;cursor:pointer}
+.btn:disabled{opacity:.5}
+.btn.sec{background:#3a2552;color:#fff}
+.btn.peq{padding:8px 14px;font-size:14px}
+input{font:inherit;padding:12px;border-radius:10px;border:1px solid #4a3566;background:#1a0b2a;color:#fff;width:100%;font-size:16px}
+label{display:block;font-size:13px;color:var(--mut);margin:12px 0 4px}
+h2,h3{margin:14px 0 6px}
+.fila{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px}
+.msg{color:var(--err);min-height:20px;margin:10px 0}
+.tarjeta{background:var(--card);border-radius:14px;padding:18px;margin:14px 0;max-width:760px}
+.ficha{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;background:var(--card);border-radius:12px;padding:14px;margin:8px 0;max-width:760px}
+.mut{color:var(--mut);font-size:14px}
+#yt{position:absolute;inset:0;width:100%;height:100%;border:0;pointer-events:none}
+#sinVideo{position:absolute;inset:0;display:none;align-items:center;justify-content:center;text-align:center;padding:30px;color:var(--mut)}
+#toque{position:absolute;inset:0;z-index:2;cursor:pointer}
+#salida{position:absolute;left:0;top:0;width:90px;height:90px;z-index:3}
+.rueda{position:relative;width:min(78vw,78vh);height:min(78vw,78vh)}
+#lienzo{width:100%;height:100%}
+#puntero{position:absolute;top:-22px;left:50%;transform:translateX(-50%);width:0;height:0;border-left:22px solid transparent;border-right:22px solid transparent;border-top:44px solid #fff;filter:drop-shadow(0 4px 6px #000);z-index:1}
+#resultado{position:absolute;inset:0;display:none;flex-direction:column;align-items:center;justify-content:center;background:rgba(0,0,0,.72);text-align:center;padding:30px}
+#resultado.on{display:flex}
+#resTit{font-size:7vmin;margin:0 0 2vh}
+#resMsg{font-size:4vmin;margin:0 0 3vh;max-width:80vw}
+#resCuenta{color:var(--mut);font-size:2.6vmin;margin:0}
+</style>
+</head>
+<body>
+
+<!-- LOGIN DEL PUNTO -->
+<section id="vLogin" class="vista on">
+  <div class="wrap">
+    <h1 style="margin:0 0 4px">Ruleta PDV</h1>
+    <p class="mut" style="margin:0 0 18px">Ingresá con el usuario y la contraseña del punto de venta.</p>
+    <label>Usuario</label>
+    <input id="lUsr" autocapitalize="off" autocomplete="username">
+    <label>Contraseña</label>
+    <input id="lPass" type="password" autocomplete="current-password">
+    <div class="msg" id="lMsg"></div>
+    <button class="btn" id="lBtn" style="width:100%">Entrar</button>
+  </div>
+</section>
+
+<!-- VIDEO DE REPOSO -->
+<section id="vVideo" class="vista">
+  <iframe id="yt" allow="autoplay; encrypted-media"></iframe>
+  <div id="sinVideo">El video de este punto todavía no está configurado.</div>
+  <div id="toque"></div>
+  <div id="salida"></div>
+</section>
+
+<!-- RULETA -->
+<section id="vJuego" class="vista">
+  <div class="rueda">
+    <div id="puntero"></div>
+    <canvas id="lienzo" width="800" height="800"></canvas>
+  </div>
+  <div id="resultado">
+    <h1 id="resTit"></h1>
+    <p id="resMsg"></p>
+    <p id="resCuenta"></p>
+  </div>
+</section>
+
+<!-- PANEL DEL DUEÑO (se abre con ?modo=dueno) -->
+<section id="vDueno" class="vista">
+  <div id="dLogin" class="wrap" hidden>
+    <h2>Panel del dueño</h2>
+    <label>Clave del dueño</label>
+    <input id="dClave" type="password">
+    <div class="msg" id="dLoginMsg"></div>
+    <button class="btn" id="dEntrar">Entrar</button>
+  </div>
+
+  <div id="dPanel" hidden>
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;max-width:760px">
+      <h2 style="margin:0">Clientes</h2>
+      <div>
+        <button class="btn" id="dNuevo">+ Nuevo cliente</button>
+        <button class="btn sec" id="dSalir">Salir</button>
+      </div>
+    </div>
+    <div id="dLista" style="margin-top:12px"></div>
+    <div id="dEditor" hidden></div>
+  </div>
+</section>
+
+<script>
+// ===== CONFIGURACIÓN =====
+// Pegá acá la URL de la web app de Apps Script (termina en /exec)
+const BACKEND_URL = "https://script.google.com/macros/s/AKfycbwBh7Qq8h9aJc5n0B82UlBDeZMEDHXdwTGP21gQMFfKy4UolasJkEhVMuyHQ1PB9EQI/exec";
+const BACKEND_OK = BACKEND_URL.startsWith("https://");
+const LS_SESION = "ruleta_sesion";
+const LS_PEND = "ruleta_pendientes";
+
+// ===== UTILIDADES =====
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const lsGet = k => { try { return JSON.parse(localStorage.getItem(k)); } catch (e) { return null; } };
+const lsSet = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} };
+const lsDel = k => { try { localStorage.removeItem(k); } catch (e) {} };
+const ssGet = k => { try { return sessionStorage.getItem(k) || ""; } catch (e) { return ""; } };
+const ssSet = (k, v) => { try { v ? sessionStorage.setItem(k, v) : sessionStorage.removeItem(k); } catch (e) {} };
+
+async function pedir(url, opts) {
+  if (!BACKEND_OK) throw new Error("sin backend");
+  const ctrl = new AbortController();
+  const t = setTimeout(() => ctrl.abort(), 10000);
+  try {
+    const r = await fetch(url, { ...opts, signal: ctrl.signal });
+    return await r.json();
+  } finally { clearTimeout(t); }
+}
+const api = body => pedir(BACKEND_URL, { method: "POST", headers: { "Content-Type": "text/plain;charset=utf-8" }, body: JSON.stringify(body) });
+const apiGet = params => pedir(BACKEND_URL + "?" + new URLSearchParams(params));
+
+function parseVideo(s) {
+  s = String(s || "").trim();
+  if (/^[\w-]{11}$/.test(s)) return s;
+  const m = s.match(/(?:v=|youtu\.be\/|embed\/|shorts\/|live\/)([\w-]{11})/);
+  return m ? m[1] : "";
+}
+function slug(s) {
+  return String(s || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 40);
+}
+
+// Misma lógica que el servidor: reparte los ganadores de forma pareja entre los perdedores
+function tipos(G, P) {
+  const N = G + P, out = [];
+  for (let i = 0; i < N; i++) out.push(Math.floor((i + 1) * G / N) > Math.floor(i * G / N));
+  return out;
+}
+function slotsLocal(c) {
+  const G = +c.ganadores || 1, P = +c.perdedores || 1, t = tipos(G, P), prem = c.premios || [];
+  let k = 0;
+  return t.map(g => {
+    if (!g) return { gana: false, label: "Otra vez", mensaje: c.mensajePerder || "¡Gracias por participar!" };
+    const p = prem[k % prem.length] || { nombre: "", mensaje: "" };
+    k++;
+    return { gana: true, label: p.nombre, mensaje: p.mensaje };
+  });
+}
+
+// ===== ESTADO =====
+let sesion = lsGet(LS_SESION);
+let cfg = sesion ? sesion.config : null;
+let pendientes = lsGet(LS_PEND) || [];
+let girando = false, rot = 0, timerRei = null, pressTimer = null;
+let clave = ssGet("ruleta_clave");
+let dClientes = [], editId = null;
+
+function mostrar(id) {
+  ["vLogin", "vVideo", "vJuego", "vDueno"].forEach(v => $("#" + v).classList.toggle("on", v === id));
+}
+
+// ===== TABLET: LOGIN Y SESIÓN =====
+async function entrar() {
+  const u = $("#lUsr").value.trim().toLowerCase(), p = $("#lPass").value;
+  const msg = $("#lMsg");
+  msg.textContent = "";
+  if (!u || !p) { msg.textContent = "Ingresá usuario y contraseña."; return; }
+  $("#lBtn").disabled = true;
+  try {
+    const j = await api({ action: "login", id: u, password: p });
+    if (j.error) { msg.textContent = j.error; return; }
+    sesion = { id: j.id, token: j.token, config: j.config };
+    cfg = j.config;
+    lsSet(LS_SESION, sesion);
+    $("#lPass").value = "";
+    irVideo();
+    flushPendientes();
+  } catch (e) {
+    msg.textContent = BACKEND_OK ? "No hay conexión con el servidor. Probá de nuevo." : "Falta configurar la dirección del servidor en el archivo.";
+  } finally { $("#lBtn").disabled = false; }
+}
+
+function cerrarSesion() {
+  sesion = null; cfg = null;
+  lsDel(LS_SESION);
+  clearTimeout(timerRei);
+  $("#yt").removeAttribute("src");
+  $("#lMsg").textContent = "Ingresá de nuevo con el usuario y la contraseña.";
+  mostrar("vLogin");
+}
+
+async function refrescar() {
+  if (!sesion) return;
+  try {
+    const j = await apiGet({ action: "config", id: sesion.id, token: sesion.token });
+    if (j.error === "sesion") { cerrarSesion(); return; }
+    if (!j.error) {
+      cfg = j; sesion.config = j; lsSet(LS_SESION, sesion);
+      if ($("#vVideo").classList.contains("on")) setVideo();
+    }
+  } catch (e) { /* sin conexión: sigue con la copia guardada */ }
+}
+
+// ===== TABLET: VIDEO, JUEGO Y VUELTA =====
+function setVideo() {
+  const yt = $("#yt"), sin = $("#sinVideo");
+  if (cfg && cfg.videoId) {
+    sin.style.display = "none";
+    const id = encodeURIComponent(cfg.videoId);
+    yt.src = `https://www.youtube-nocookie.com/embed/${id}?autoplay=1&mute=1&loop=1&playlist=${id}&controls=0&rel=0&modestbranding=1&playsinline=1`;
+  } else {
+    yt.removeAttribute("src");
+    sin.style.display = "flex";
+  }
+}
+
+function irVideo() {
+  clearTimeout(timerRei);
+  $("#resultado").classList.remove("on");
+  mostrar("vVideo");
+  setVideo();
+}
+
+async function jugar() {
+  if (girando || !sesion) return;
+  clearTimeout(timerRei);
+  $("#yt").removeAttribute("src");
+  $("#resultado").classList.remove("on");
+  mostrar("vJuego");
+
+  let r = null;
+  try {
+    const j = await api({ action: "jugar", id: sesion.id, token: sesion.token });
+    if (j.error === "sesion") { cerrarSesion(); return; }
+    if (!j.error) r = j;
+  } catch (e) { /* sin conexión: juega localmente y guarda para enviar después */ }
+
+  if (r) flushPendientes();
+  else r = jugarLocal();
+  girar(r);
+}
+
+function jugarLocal() {
+  const sl = slotsLocal(cfg), idx = Math.floor(Math.random() * sl.length), s = sl[idx];
+  const premio = s.gana ? s.label : "";
+  pendientes.push({ cid: sesion.id, fecha: new Date().toISOString(), resultado: s.gana ? "gano" : "perdio", premio });
+  lsSet(LS_PEND, pendientes);
+  return { idx, gana: s.gana, premio, mensaje: s.mensaje, ruleta: sl, reinicioSegundos: cfg.reinicioSegundos || 10 };
+}
+
+async function flushPendientes() {
+  if (!sesion) return;
+  const lote = pendientes.filter(p => p.cid === sesion.id).slice(0, 200);
+  if (!lote.length) return;
+  try {
+    const j = await api({
+      action: "registrar", id: sesion.id, token: sesion.token,
+      jugadas: lote.map(p => ({ fecha: p.fecha, resultado: p.resultado, premio: p.premio }))
+    });
+    if (j.error === "sesion") { cerrarSesion(); return; }
+    if (j.ok) { pendientes = pendientes.filter(p => !lote.includes(p)); lsSet(LS_PEND, pendientes); }
+  } catch (e) {}
+}
+
+function dibujar(sl, rotacion) {
+  const GOLD = "#F2B705", DARK = "#1b0a2e";
+  const cv = $("#lienzo"), ctx = cv.getContext("2d"), W = cv.width, R = W / 2, N = sl.length, ang = 2 * Math.PI / N;
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.clearRect(0, 0, W, W);
+  ctx.translate(R, R);
+  ctx.rotate(rotacion);
+  sl.forEach((s, i) => {
+    const a0 = -Math.PI / 2 + i * ang, a1 = a0 + ang;
+    ctx.beginPath(); ctx.moveTo(0, 0); ctx.arc(0, 0, R - 6, a0, a1); ctx.closePath();
+    ctx.fillStyle = s.gana ? GOLD : DARK;
+    ctx.fill();
+    ctx.strokeStyle = "#000"; ctx.lineWidth = 4; ctx.stroke();
+    ctx.save();
+    ctx.rotate(a0 + ang / 2);
+    ctx.textAlign = "right"; ctx.textBaseline = "middle";
+    ctx.fillStyle = s.gana ? "#000" : "#fff";
+    ctx.font = `bold ${Math.round(R * 0.075)}px system-ui, sans-serif`;
+    ctx.fillText(String(s.label || "").slice(0, 20), R - 36, 0);
+    ctx.restore();
+  });
+  ctx.beginPath(); ctx.arc(0, 0, R * 0.12, 0, 2 * Math.PI);
+  ctx.fillStyle = GOLD; ctx.fill();
+  ctx.strokeStyle = "#000"; ctx.lineWidth = 6; ctx.stroke();
+}
+
+function girar(r) {
+  const sl = r.ruleta || slotsLocal(cfg);
+  const N = sl.length, ang = 2 * Math.PI / N, TAU = 2 * Math.PI;
+  // Lleva el centro del lugar ganador hasta el puntero (arriba)
+  const objetivo = (((-(r.idx + 0.5) * ang) % TAU) + TAU) % TAU;
+  const actual = ((rot % TAU) + TAU) % TAU;
+  const delta = (((objetivo - actual) % TAU) + TAU) % TAU;
+  const inicio = rot, fin = rot + delta + 6 * TAU, dur = 4500, t0 = performance.now();
+  const ease = t => 1 - Math.pow(1 - t, 4);
+  girando = true;
+  dibujar(sl, rot);
+  requestAnimationFrame(function paso(now) {
+    const t = Math.min((now - t0) / dur, 1);
+    rot = inicio + (fin - inicio) * ease(t);
+    dibujar(sl, rot);
+    if (t < 1) requestAnimationFrame(paso);
+    else { girando = false; mostrarResultado(r); }
+  });
+}
+
+function mostrarResultado(r) {
+  $("#resTit").textContent = r.gana ? (r.premio || "¡Ganaste!") : "Esta vez no";
+  $("#resMsg").textContent = r.mensaje || "";
+  $("#resultado").classList.add("on");
+  let s = Math.max(3, +r.reinicioSegundos || 10);
+  const tick = () => {
+    if (s <= 0) { irVideo(); return; }
+    $("#resCuenta").textContent = `Volvemos al video en ${s} s`;
+    s--;
+    timerRei = setTimeout(tick, 1000);
+  };
+  tick();
+}
+
+// Mantener 4 segundos en la esquina superior izquierda cierra la sesión del punto
+const salida = $("#salida");
+salida.addEventListener("pointerdown", () => { pressTimer = setTimeout(cerrarSesion, 4000); });
+["pointerup", "pointerleave", "pointercancel"].forEach(ev => salida.addEventListener(ev, () => clearTimeout(pressTimer)));
+$("#toque").addEventListener("click", jugar);
+$("#lBtn").addEventListener("click", entrar);
+$("#lPass").addEventListener("keydown", e => { if (e.key === "Enter") entrar(); });
+window.addEventListener("online", flushPendientes);
+setInterval(flushPendientes, 60000);
+
+// ===== PANEL DEL DUEÑO =====
+function iniciarDueno() {
+  mostrar("vDueno");
+  if (clave) mostrarPanel();
+  else { $("#dLogin").hidden = false; $("#dPanel").hidden = true; }
+}
+
+async function dEntrar() {
+  const c = $("#dClave").value;
+  $("#dLoginMsg").textContent = "";
+  try {
+    const j = await api({ action: "dueno_login", clave: c });
+    if (j.error) { $("#dLoginMsg").textContent = "Clave incorrecta."; return; }
+    clave = c; ssSet("ruleta_clave", c);
+    $("#dClave").value = "";
+    mostrarPanel();
+  } catch (e) { $("#dLoginMsg").textContent = "No hay conexión con el servidor."; }
+}
+
+function mostrarPanel() {
+  $("#dLogin").hidden = true;
+  $("#dPanel").hidden = false;
+  dCargar();
+}
+
+function salirDueno() {
+  clave = ""; ssSet("ruleta_clave", "");
+  dClientes = []; editId = null;
+  $("#dEditor").hidden = true;
+  $("#dPanel").hidden = true;
+  $("#dLogin").hidden = false;
+  $("#dLoginMsg").textContent = "Ingresá la clave de nuevo.";
+}
+
+async function dCargar() {
+  const cont = $("#dLista");
+  let j;
+  try { j = await api({ action: "listar", clave }); }
+  catch (e) { cont.textContent = "No hay conexión con el servidor."; return dClientes; }
+  if (j.error === "clave") { salirDueno(); return dClientes; }
+  if (j.error) { cont.textContent = j.error; return dClientes; }
+  dClientes = j.clientes || [];
+  cont.innerHTML = "";
+  if (!dClientes.length) {
+    cont.innerHTML = '<p class="mut">Todavía no hay clientes. Creá el primero con "+ Nuevo cliente".</p>';
+  }
+  dClientes.forEach(c => {
+    const prob = Math.round(c.ganadores * 100 / (c.ganadores + c.perdedores));
+    const d = document.createElement("div");
+    d.className = "ficha";
+    d.innerHTML = `
+      <div>
+        <b>${esc(c.nombre)}</b><br>
+        <span class="mut">${esc(c.razonSocial)} · usuario: ${esc(c.id)}</span><br>
+        <span class="mut">Probabilidad ${prob}% · ${c.jugadas} jugadas · ${c.ganados} ganados · ${c.perdidos} perdidos</span>
+      </div>
+      <button class="btn sec peq" data-editar="${esc(c.id)}">Editar</button>`;
+    cont.appendChild(d);
+  });
+  return dClientes;
+}
+
+function editar(id) {
+  const c = id ? dClientes.find(x => x.id === id) : null;
+  editId = c ? c.id : null;
+  const v = c || { nombre: "", razonSocial: "", videoId: "", ganadores: 1, perdedores: 4, premios: [], mensajePerder: "¡Gracias por participar!", reinicioSegundos: 10 };
+  const pr = v.premios || [];
+  const p1 = pr[0] || { nombre: "", mensaje: "" }, p2 = pr[1] || { nombre: "", mensaje: "" };
+  const ed = $("#dEditor");
+  ed.hidden = false;
+  ed.innerHTML = `
+    <div class="tarjeta">
+      <h2 style="margin-top:0">${c ? "Editar cliente" : "Nuevo cliente"}</h2>
+      <label>Cliente</label>
+      <input id="eNombre" value="${esc(v.nombre)}" placeholder="Ej: Almacén Don Pepe">
+      <div class="mut" id="eUsr" style="margin-top:4px"></div>
+
+      <label>Razón social</label>
+      <input id="eRazon" value="${esc(v.razonSocial)}">
+
+      <label>Contraseña ${c ? "(dejala vacía para no cambiarla)" : ""}</label>
+      <input id="ePass" type="text" autocomplete="off">
+
+      <label>Video de YouTube (link o ID)</label>
+      <input id="eVideo" value="${esc(v.videoId ? "https://youtu.be/" + v.videoId : "")}">
+
+      <h3>Juego</h3>
+      <div class="fila">
+        <div><label>Lugares ganadores</label><input id="eGan" type="number" min="1" max="11" value="${v.ganadores}"></div>
+        <div><label>Lugares perdedores</label><input id="ePer" type="number" min="1" max="11" value="${v.perdedores}"></div>
+      </div>
+      <div id="eProb" style="color:var(--c2);margin-top:8px"></div>
+
+      <label>Premio 1</label>
+      <input id="eP1n" value="${esc(p1.nombre)}" placeholder="Nombre del premio">
+      <label>Mensaje al ganar</label>
+      <input id="eP1m" value="${esc(p1.mensaje)}">
+
+      <label>Premio 2 (opcional)</label>
+      <input id="eP2n" value="${esc(p2.nombre)}">
+      <label>Mensaje al ganar</label>
+      <input id="eP2m" value="${esc(p2.mensaje)}">
+
+      <label>Mensaje al perder</label>
+      <input id="eMP" value="${esc(v.mensajePerder)}">
+
+      <label>Segundos antes de volver al video</label>
+      <input id="eRei" type="number" min="3" max="60" value="${v.reinicioSegundos}">
+
+      <div class="msg" id="eMsg"></div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap">
+        <button class="btn" id="eGuardar">Guardar</button>
+        <button class="btn sec" id="eCerrar">Cerrar</button>
+      </div>
+    </div>
+
+    <div class="tarjeta" ${c ? "" : "hidden"}>
+      <h3 style="margin-top:0">Historial de jugadas</h3>
+      <div id="hRes" class="mut"></div>
+      <div id="hTabla"></div>
+    </div>`;
+
+  const actualizar = () => {
+    const G = Math.round(+$("#eGan").value) || 0, P = Math.round(+$("#ePer").value) || 0, N = G + P;
+    $("#eProb").textContent = (G >= 1 && P >= 1 && G <= 11 && P <= 11 && N <= 12)
+      ? `Probabilidad de ganar: ${Math.round(G * 100 / N)}% (${G} de ${N} lugares)`
+      : "Revisá los lugares: entre 1 y 11 cada uno, máximo 12 en total.";
+  };
+  $("#eGan").addEventListener("input", actualizar);
+  $("#ePer").addEventListener("input", actualizar);
+  actualizar();
+
+  const usr = () => { $("#eUsr").textContent = "Usuario para la tablet: " + (c ? c.id : (slug($("#eNombre").value) || "(se genera con el nombre)")); };
+  $("#eNombre").addEventListener("input", () => { if (!c) usr(); });
+  usr();
+
+  $("#eGuardar").addEventListener("click", guardarCliente);
+  $("#eCerrar").addEventListener("click", () => { ed.hidden = true; editId = null; });
+  if (c) cargarHistorial(c.id);
+  ed.scrollIntoView({ behavior: "smooth" });
+}
+
+function msgEditor(texto, ok) {
+  const m = $("#eMsg");
+  m.textContent = texto;
+  m.style.color = ok ? "var(--ok)" : "var(--err)";
+}
+
+async function guardarCliente() {
+  msgEditor("");
+  const nombre = $("#eNombre").value.trim();
+  const pass = $("#ePass").value;
+  const G = Math.round(+$("#eGan").value), P = Math.round(+$("#ePer").value);
+  const premios = [["#eP1n", "#eP1m"], ["#eP2n", "#eP2m"]]
+    .map(([n, m]) => ({ nombre: $(n).value.trim(), mensaje: $(m).value.trim() }))
+    .filter(p => p.nombre);
+  const cliente = {
+    nombre,
+    razonSocial: $("#eRazon").value.trim(),
+    password: pass,
+    video: $("#eVideo").value.trim(),
+    ganadores: G, perdedores: P,
+    premios,
+    mensajePerder: $("#eMP").value.trim(),
+    reinicioSegundos: Math.round(+$("#eRei").value) || 10
+  };
+  if (!nombre) return msgEditor("Falta el nombre del cliente.");
+  if (!editId && !pass) return msgEditor("Falta la contraseña del cliente.");
+  if (!parseVideo(cliente.video)) return msgEditor("El video no es válido. Pegá el link de YouTube o su ID de 11 caracteres.");
+  if (!(G >= 1 && P >= 1 && G <= 11 && P <= 11 && G + P <= 12)) return msgEditor("Lugares: ganadores y perdedores entre 1 y 11, con no más de 12 en total.");
+  if (!premios.length) return msgEditor("Cargá al menos el Premio 1.");
+
+  try {
+    const j = await api({ action: "guardar", clave, id: editId, cliente });
+    if (j.error === "clave") { salirDueno(); return; }
+    if (j.error) return msgEditor(j.error);
+    await dCargar();
+    editar(j.id);
+    msgEditor("Guardado.", true);
+  } catch (e) {
+    msgEditor("No se pudo guardar. Revisá la conexión.");
+  }
+}
+
+async function cargarHistorial(id) {
+  const res = $("#hRes"), tab = $("#hTabla");
+  res.textContent = "Cargando…";
+  try {
+    const j = await api({ action: "historial", clave, id });
+    if (j.error) { res.textContent = j.error; return; }
+    const t = j.totales;
+    res.innerHTML = `${t.jugadas} jugadas · <b style="color:var(--ok)">${t.ganados} ganados</b> · <b style="color:var(--err)">${t.perdidos} perdidos</b> · ${t.pct}% de ganados`;
+    if (!j.jugadas.length) { tab.innerHTML = '<p class="mut">Todavía no hay jugadas.</p>'; return; }
+    tab.innerHTML = `
+      <div style="overflow-x:auto;margin-top:12px">
+        <table style="width:100%;border-collapse:collapse;font-size:14px">
+          <tr style="text-align:left;color:var(--mut)"><th style="padding:6px">Fecha</th><th>Resultado</th><th>Premio</th></tr>
+          ${j.jugadas.map(r => `
+            <tr style="border-top:1px solid #3a2552">
+              <td style="padding:6px">${esc(new Date(r.fecha).toLocaleString("es-AR"))}</td>
+              <td>${r.resultado === "gano" ? "Ganó" : "Perdió"}</td>
+              <td>${esc(r.premio || "—")}</td>
+            </tr>`).join("")}
+        </table>
+      </div>`;
+  } catch (e) { res.textContent = "No se pudo cargar el historial."; }
+}
+
+// Eventos del panel
+$("#dEntrar").addEventListener("click", dEntrar);
+$("#dClave").addEventListener("keydown", e => { if (e.key === "Enter") dEntrar(); });
+$("#dNuevo").addEventListener("click", () => editar(null));
+$("#dSalir").addEventListener("click", salirDueno);
+$("#dLista").addEventListener("click", e => {
+  const b = e.target.closest("[data-editar]");
+  if (b) editar(b.dataset.editar);
+});
+
+// ===== ARRANQUE =====
+function iniciar() {
+  if (new URLSearchParams(location.search).get("modo") === "dueno") { iniciarDueno(); return; }
+  if (sesion && cfg) {
+    irVideo();
+    refrescar();
+    flushPendientes();
+  } else {
+    mostrar("vLogin");
+  }
+}
+iniciar();
+</script>
+</body>
+</html>
